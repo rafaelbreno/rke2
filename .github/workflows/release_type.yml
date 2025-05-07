@@ -1,0 +1,46 @@
+name: Release Event Logger
+
+on:
+  release:
+    types: [published, unpublished, created, edited, deleted, prereleased, released]
+
+jobs:
+  log-event:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Print event information
+        run: |
+          echo "========== RELEASE EVENT DETECTED =========="
+          echo "Event type: ${{ github.event.action }}"
+          echo "Release name: ${{ github.event.release.name }}"
+          echo "Release tag: ${{ github.event.release.tag_name }}"
+          
+          # Print different messages based on the event type
+          if [ "${{ github.event.action }}" == "published" ]; then
+            echo "A release has been published! 🚀"
+          elif [ "${{ github.event.action }}" == "unpublished" ]; then
+            echo "A release has been unpublished! 📦"
+          elif [ "${{ github.event.action }}" == "created" ]; then
+            echo "A new release has been created! 🎉"
+          elif [ "${{ github.event.action }}" == "edited" ]; then
+            echo "A release has been edited! ✏️"
+          elif [ "${{ github.event.action }}" == "deleted" ]; then
+            echo "A release has been deleted! 🗑️"
+          elif [ "${{ github.event.action }}" == "prereleased" ]; then
+            echo "A pre-release has been created! 🧪"
+          elif [ "${{ github.event.action }}" == "released" ]; then
+            echo "A pre-release has been converted to a full release! 🎯"
+          else
+            echo "Unknown release event: ${{ github.event.action }}"
+          fi
+          
+          # Additional release information
+          echo "Release URL: ${{ github.event.release.html_url }}"
+          echo "Is prerelease? ${{ github.event.release.prerelease }}"
+          echo "Is draft? ${{ github.event.release.draft }}"
+          echo "Created at: ${{ github.event.release.created_at }}"
+          echo "Published at: ${{ github.event.release.published_at }}"
+          echo "==========================================="
