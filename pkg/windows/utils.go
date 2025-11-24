@@ -5,6 +5,7 @@ package windows
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -17,7 +18,6 @@ import (
 	"github.com/Microsoft/hcsshim"
 	wapi "github.com/iamacarpet/go-win64api"
 	"github.com/libp2p/go-netroute"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	opv1 "github.com/tigera/operator/api/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -31,10 +31,25 @@ var (
 	}
 )
 
+type networkProvider interface {
+	GetHNSNetworkByName(name string) (*hcsshim.HNSNetwork, error)
+}
+
+type defaultNetworkProvider struct{}
+
+func (d defaultNetworkProvider) GetHNSNetworkByName(name string) (*hcsshim.HNSNetwork, error) {
+	return hcsshim.GetHNSNetworkByName(name)
+}
+
+var (
+	netProvider networkProvider = defaultNetworkProvider{}
+	httpClient  *http.Client    = http.DefaultClient
+)
+
 // createHnsNetwork creates the network that will connect nodes and returns its managementIP
 func createHnsNetwork(backend string, networkAdapter string) (string, error) {
 	var network hcsshim.HNSNetwork
-        // Check if the interface already exists
+	// Check if the interface already exists
 	hcsnetwork, err := hcsshim.GetHNSNetworkByName(CalicoHnsNetworkName)
 	if err == nil {
 		return hcsnetwork.ManagementIP, nil
@@ -152,20 +167,22 @@ func deleteAllNetworks() error {
 
 // platformType returns the platform where we are running
 func platformType() (string, error) {
-	aksNet, _ := hcsshim.GetHNSNetworkByName("azure")
+	aksNet, _ := netProvider.GetHNSNetworkByName("azure")
 	if aksNet != nil {
 		return "aks", nil
 	}
 
-	eksNet, _ := hcsshim.GetHNSNetworkByName("vpcbr*")
+	eksNet, _ := netProvider.GetHNSNetworkByName("vpcbr*")
 	if eksNet != nil {
 		return "eks", nil
 	}
 
 	// EC2
-	ec2Resp, err := http.Get("http://169.254.169.254/latest/meta-data/local-hostname")
+	hostnameEc2Uri := "http://169.254.169.254/latest/meta-data/local-hostname"
+	ec2Resp, err := httpClient.Get(hostnameEc2Uri)
 	if err != nil && hasTimedOut(err) {
-		return "", err
+		logrus.Warnf("Timed out trying to get EC2 instance metadata from %q; defaulting to 'bare-metal' Calico platform", hostnameEc2Uri)
+		return "bare-metal", nil
 	}
 	if ec2Resp != nil {
 		defer ec2Resp.Body.Close()
@@ -175,15 +192,16 @@ func platformType() (string, error) {
 	}
 
 	// GCE
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", "http://metadata.google.internal/computeMetadata/v1/instance/hostname", nil)
+	hostnameGoogleUri := "http://metadata.google.internal/computeMetadata/v1/instance/hostname"
+	req, err := http.NewRequest("GET", hostnameGoogleUri, nil)
 	if err != nil {
 		return "", err
 	}
 	req.Header.Add("Metadata-Flavor", "Google")
-	gceResp, err := client.Do(req)
+	gceResp, err := httpClient.Do(req)
 	if err != nil && hasTimedOut(err) {
-		return "", err
+		logrus.Warnf("Timed out trying to get GCE instance metadata from %q; defaulting to 'bare-metal' Calico platform", hostnameGoogleUri)
+		return "bare-metal", nil
 	}
 	if gceResp != nil {
 		defer gceResp.Body.Close()

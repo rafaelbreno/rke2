@@ -25,7 +25,7 @@ check_target_mountpoint() {
 
 # check_target_ro returns success if the target directory is read-only
 check_target_ro() {
-    touch "$1"/.rke2-ro-test && rm -rf "$1"/.rke2-ro-test
+    touch "$1"/.rke2-ro-test && rm -rf -- "$1"/.rke2-ro-test
     test $? -ne 0
 }
 
@@ -96,25 +96,30 @@ uninstall_remove_files()
             if [ "${TRANSACTIONAL_UPDATE=false}" != "true" ] && [ -x /usr/sbin/transactional-update ]; then
                 uninstall_cmd="transactional-update -c --no-selfupdate -d run $uninstall_cmd"
             fi
+            set +e
             $uninstall_cmd
+            zypper_exit_code=$?
+            set -e
+            # Ignore 104 - ZYPPER_EXIT_INF_CAP_NOT_FOUND, which indicates that the package was not found
+            if [ $zypper_exit_code -ne 0 ] && [ $zypper_exit_code -ne 104 ]; then
+                exit $zypper_exit_code
+            fi
             rm -f /etc/zypp/repos.d/rancher-rke2*.repo
          fi
     fi
 
     log "Removing rke2 files"
-    $transactional_update find "${INSTALL_RKE2_ROOT}/lib/systemd/system" -name rke2-*.service -type f -delete
-    $transactional_update find "${INSTALL_RKE2_ROOT}/lib/systemd/system" -name rke2-*.env -type f -delete
-    find /etc/systemd/system -name rke2-*.service -type f -delete
-    $transactional_update rm -f "${INSTALL_RKE2_ROOT}/bin/rke2"
-    $transactional_update rm -f "${INSTALL_RKE2_ROOT}/bin/rke2-killall.sh"
-    $transactional_update rm -rf "${INSTALL_RKE2_ROOT}/share/rke2"
-    rm -rf /etc/rancher/rke2
-    rm -rf /etc/rancher/node
+    $transactional_update find "${INSTALL_RKE2_ROOT}/lib/systemd/system" -name "rke2-*.service" -delete
+    $transactional_update find "${INSTALL_RKE2_ROOT}/lib/systemd/system" -name "rke2-*.env" -delete
+    find /etc/systemd/system -name "rke2-*.service" -delete
+    $transactional_update rm -f -- "${INSTALL_RKE2_ROOT}/bin/rke2"
+    $transactional_update rm -f -- "${INSTALL_RKE2_ROOT}/bin/rke2-killall.sh"
+    $transactional_update rm -rf -- "${INSTALL_RKE2_ROOT}/share/rke2"
+
+    rm -rf /etc/rancher/rke2 /etc/rancher/node /etc/cni /opt/cni/bin /var/lib/cni/ /var/log/pods/ /var/log/containers /var/log/calico
     rm -d /etc/rancher || true
-    rm -rf /etc/cni
-    rm -rf /opt/cni/bin
-    rm -rf /var/lib/kubelet || true
-    rm -rf "${RKE2_DATA_DIR}" || error "Failed to remove /var/lib/rancher/rke2"
+    rm --one-file-system -rf /var/lib/kubelet || true
+    rm -rf -- "${RKE2_DATA_DIR}" || error "Failed to remove ${RKE2_DATA_DIR}"
     rm -d /var/lib/rancher || true
 
     if type fapolicyd >/dev/null 2>&1; then
@@ -133,7 +138,7 @@ uninstall_remove_self()
 {
     cleanup
     log "Removing uninstall script"
-    $transactional_update rm -f "${INSTALL_RKE2_ROOT}/bin/rke2-uninstall.sh"
+    $transactional_update rm -f -- "${INSTALL_RKE2_ROOT}/bin/rke2-uninstall.sh"
 }
 
 # Define a cleanup function that triggers on exit

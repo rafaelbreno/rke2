@@ -17,7 +17,7 @@ import (
 	"github.com/k3s-io/helm-controller/pkg/generated/controllers/helm.cattle.io"
 	daemonconfig "github.com/k3s-io/k3s/pkg/daemons/config"
 	"github.com/k3s-io/k3s/pkg/version"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/rancher/rke2/pkg/logging"
 	"github.com/sirupsen/logrus"
 	opv1 "github.com/tigera/operator/api/v1"
@@ -146,12 +146,7 @@ func (c *Calico) Setup(ctx context.Context, nodeConfig *daemonconfig.Node, restC
 		return err
 	}
 
-	if err := c.writeConfigFiles(); err != nil {
-		return err
-	}
-
-	logrus.Info("Generating HNS networks, please wait")
-	return c.generateCalicoNetworks()
+	return c.writeConfigFiles()
 }
 
 // initializeConfig sets the default configuration in CNIConfig
@@ -254,7 +249,7 @@ func (c *Calico) createKubeConfigAndClient(ctx context.Context, restConfig *rest
 	serviceAccounts := client.CoreV1().ServiceAccounts(CalicoSystemNamespace)
 	token, err := serviceAccounts.CreateToken(ctx, calicoNode, &req, metav1.CreateOptions{})
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "failed to create token for service account (%s/%s)", CalicoSystemNamespace, calicoNode)
+		return nil, nil, pkgerrors.WithMessagef(err, "failed to create token for service account (%s/%s)", CalicoSystemNamespace, calicoNode)
 	}
 
 	calicoKubeConfig.Token = token.Status.Token
@@ -266,8 +261,13 @@ func (c *Calico) createKubeConfigAndClient(ctx context.Context, restConfig *rest
 func (c *Calico) Start(ctx context.Context) error {
 	logPath := filepath.Join(c.CNICfg.ConfigPath, "logs")
 
+	logrus.Info("Generating HNS networks, please wait")
+	if err := c.generateCalicoNetworks(); err != nil {
+		return err
+	}
+
 	// Wait for the node to be registered in the cluster
-	if err := wait.PollImmediateWithContext(ctx, 5*time.Second, 5*time.Minute, func(ctx context.Context) (bool, error) {
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
 		_, err := c.KubeClient.CoreV1().Nodes().Get(ctx, c.CNICfg.Hostname, metav1.GetOptions{})
 		if err != nil {
 			logrus.WithError(err).Warningf("Calico can't start because it can't find node, retrying %s", c.CNICfg.Hostname)
@@ -305,11 +305,11 @@ func (c *Calico) Start(ctx context.Context) error {
 func (c *Calico) generateCalicoNetworks() error {
 	nodeRebooted, err := c.isNodeRebooted()
 	if err != nil {
-		return errors.Wrapf(err, "failed to check last node reboot time")
+		return pkgerrors.WithMessagef(err, "failed to check last node reboot time")
 	}
 	if nodeRebooted {
 		if err = deleteAllNetworks(); err != nil {
-			return errors.Wrapf(err, "failed to delete all networks before bootstrapping calico")
+			return pkgerrors.WithMessagef(err, "failed to delete all networks before bootstrapping calico")
 		}
 	}
 
@@ -520,7 +520,7 @@ func generateGeneralCalicoEnvs(config *CalicoConfig) []string {
 func (c *Calico) ReserveSourceVip(ctx context.Context) (string, error) {
 	var vip string
 
-	if err := wait.PollImmediateWithContext(ctx, 5*time.Second, 5*time.Minute, func(ctx context.Context) (bool, error) {
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
 		// calico-node is creating an endpoint named Calico_ep for this purpose
 		endpoint, err := hcsshim.GetHNSEndpointByName("Calico_ep")
 		if err != nil {
@@ -536,7 +536,7 @@ func (c *Calico) ReserveSourceVip(ctx context.Context) (string, error) {
 	return vip, nil
 }
 
-//Get latest stored reboot
+// Get latest stored reboot
 func (c *Calico) getStoredLastBootTime() (string, error) {
 	lastRebootPath := filepath.Join(c.CNICfg.ConfigPath, "lastBootTime.txt")
 	lastStoredBoot, err := os.ReadFile(lastRebootPath)
@@ -550,7 +550,7 @@ func (c *Calico) getStoredLastBootTime() (string, error) {
 	return string(lastStoredBoot), nil
 }
 
-//Set last boot time on the registry
+// Set last boot time on the registry
 func (c *Calico) setStoredLastBootTime(lastBootTime string) error {
 	lastRebootPath := filepath.Join(c.CNICfg.ConfigPath, "lastBootTime.txt")
 	err := os.WriteFile(lastRebootPath, []byte(lastBootTime), 0644)

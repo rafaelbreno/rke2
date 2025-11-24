@@ -1,7 +1,7 @@
 ARG KUBERNETES_VERSION=dev
 
 # Build environment
-FROM rancher/hardened-build-base:v1.22.8b1 AS build
+FROM rancher/hardened-build-base:v1.24.9b1 AS build
 ARG DAPPER_HOST_ARCH
 ENV ARCH $DAPPER_HOST_ARCH
 RUN set -x && \
@@ -30,7 +30,7 @@ RUN zypper install -y systemd-rpm-macros
 
 # Dapper/Drone/CI environment
 FROM build AS dapper
-ENV DAPPER_ENV GODEBUG CI GOCOVER REPO TAG GITHUB_ACTION_TAG PAT_USERNAME PAT_TOKEN KUBERNETES_VERSION DOCKER_BUILDKIT DRONE_BUILD_EVENT IMAGE_NAME AWS_SECRET_ACCESS_KEY AWS_ACCESS_KEY_ID ENABLE_REGISTRY DOCKER_USERNAME DOCKER_PASSWORD GH_TOKEN
+ENV DAPPER_ENV GODEBUG CI GOCOVER REPO TAG GITHUB_ACTION_TAG PAT_USERNAME PAT_TOKEN KUBERNETES_VERSION DOCKER_BUILDKIT DRONE_BUILD_EVENT IMAGE_NAME AWS_SECRET_ACCESS_KEY AWS_ACCESS_KEY_ID ENABLE_REGISTRY DOCKER_USERNAME DOCKER_PASSWORD GH_TOKEN REGISTRY
 ARG DAPPER_HOST_ARCH
 ENV ARCH $DAPPER_HOST_ARCH
 ENV DAPPER_OUTPUT ./dist ./bin ./build
@@ -49,8 +49,7 @@ RUN curl -sL "https://github.com/cli/cli/releases/download/v2.53.0/gh_2.53.0_lin
 RUN curl -sL https://dl.k8s.io/release/$( \
     curl -sL https://dl.k8s.io/release/stable.txt \
     )/bin/linux/${ARCH}/kubectl -o /usr/local/bin/kubectl && \
-    chmod a+x /usr/local/bin/kubectl; \
-    pip install codespell
+    chmod a+x /usr/local/bin/kubectl
 
 RUN python3 -m pip install awscli
 RUN curl -sL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.55.2
@@ -117,10 +116,10 @@ RUN rm -vf /charts/*.sh /charts/*.md /charts/chart_versions.yaml
 # This image includes any host level programs that we might need. All binaries
 # must be placed in bin/ of the file image and subdirectories of bin/ will be flattened during installation.
 # This means bin/foo/bar will become bin/bar when rke2 installs this to the host
-FROM rancher/hardened-kubernetes:v1.31.2-rke2r1-build20241023 AS kubernetes
-FROM rancher/hardened-containerd:v1.7.23-k3s1-build20241106 AS containerd
-FROM rancher/hardened-crictl:v1.31.1-build20241011 AS crictl
-FROM rancher/hardened-runc:v1.1.14-build20240910 AS runc
+FROM rancher/hardened-kubernetes:v1.34.2-rke2r1-build20251112 AS kubernetes
+FROM rancher/hardened-containerd:v2.1.5-k3s1-build20251106 AS containerd
+FROM rancher/hardened-crictl:v1.34.0-build20251017 AS crictl
+FROM rancher/hardened-runc:v1.3.3-build20251105 AS runc
 
 FROM scratch AS runtime-collect
 COPY --from=runc \
@@ -131,8 +130,6 @@ COPY --from=crictl \
     /bin/
 COPY --from=containerd \
     /usr/local/bin/containerd \
-    /usr/local/bin/containerd-shim \
-    /usr/local/bin/containerd-shim-runc-v1 \
     /usr/local/bin/containerd-shim-runc-v2 \
     /usr/local/bin/ctr \
     /bin/

@@ -6,6 +6,7 @@ package windows
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,7 +18,7 @@ import (
 	"github.com/Microsoft/hcsshim"
 	daemonconfig "github.com/k3s-io/k3s/pkg/daemons/config"
 	"github.com/k3s-io/k3s/pkg/version"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/rancher/rke2/pkg/logging"
 	"github.com/sirupsen/logrus"
 	authv1 "k8s.io/api/authentication/v1"
@@ -249,7 +250,7 @@ func (f *Flannel) createKubeConfigAndClient(ctx context.Context, restConfig *res
 	serviceAccounts := client.CoreV1().ServiceAccounts("kube-system")
 	token, err := serviceAccounts.CreateToken(ctx, "flannel", &req, metav1.CreateOptions{})
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "failed to create token for service account (kube-system/flannel)")
+		return nil, nil, pkgerrors.WithMessagef(err, "failed to create token for service account (kube-system/flannel)")
 	}
 
 	flannelKubeConfig.Token = token.Status.Token
@@ -262,7 +263,7 @@ func (f *Flannel) Start(ctx context.Context) error {
 	logPath := filepath.Join(f.CNICfg.ConfigPath, "logs", "flanneld.log")
 
 	// Wait for the node to be registered in the cluster
-	if err := wait.PollImmediateWithContext(ctx, 3*time.Second, 5*time.Minute, func(ctx context.Context) (bool, error) {
+	if err := wait.PollUntilContextTimeout(ctx, 3*time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
 		_, err := f.KubeClient.CoreV1().Nodes().Get(ctx, f.CNICfg.Hostname, metav1.GetOptions{})
 		if err != nil {
 			logrus.WithError(err).Warningf("Flanneld can't start because it can't find node, retrying %s", f.CNICfg.Hostname)
@@ -300,7 +301,7 @@ func startFlannel(ctx context.Context, config *FlannelConfig, logPath string) {
 
 	logrus.Infof("Flanneld Envs: %s and args: %v", specificEnvs, args)
 	cmd := exec.CommandContext(ctx, "flanneld.exe", args...)
-	cmd.Env = append(specificEnvs)
+	cmd.Env = specificEnvs
 	cmd.Stdout = outputFile
 	cmd.Stderr = outputFile
 	if err := cmd.Run(); err != nil {
@@ -315,7 +316,7 @@ func (f *Flannel) ReserveSourceVip(ctx context.Context) (string, error) {
 	var err error
 
 	logrus.Info("Reserving an IP on flannel HNS network for kube-proxy source vip")
-	if err := wait.PollImmediateWithContext(ctx, 10*time.Second, 5*time.Minute, func(ctx context.Context) (bool, error) {
+	if err := wait.PollUntilContextTimeout(ctx, 10*time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
 		network, err = hcsshim.GetHNSNetworkByName(f.CNICfg.OverlayNetName)
 		if err != nil || network == nil {
 			logrus.Debugf("can't find flannel HNS network, retrying %s", f.CNICfg.OverlayNetName)

@@ -5,7 +5,7 @@ import (
 	"github.com/k3s-io/k3s/pkg/configfilearg"
 	"github.com/rancher/rke2/pkg/rke2"
 	"github.com/rancher/rke2/pkg/windows"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -29,7 +29,9 @@ var (
 		"image-credential-provider-bin-dir": copyFlag,
 		"image-credential-provider-config":  copyFlag,
 		"docker":                            dropFlag,
-		"container-runtime-endpoint":        copyFlag,
+		"container-runtime-endpoint": {
+			Usage: "(agent/runtime) Disable embedded containerd and use the CRI socket at the given path",
+		},
 		"disable-default-registry-endpoint": copyFlag,
 		"nonroot-devices":                   copyFlag,
 		"image-service-endpoint":            dropFlag,
@@ -62,15 +64,15 @@ var (
 	})
 	deprecatedFlags = []cli.Flag{
 		&cli.StringFlag{
-			Name:   "system-default-registry",
-			Usage:  "(deprecated) This flag is no longer supported on agents",
-			EnvVar: "RKE2_SYSTEM_DEFAULT_REGISTRY",
-			Hidden: true,
+			Name:    "system-default-registry",
+			Usage:   "(deprecated) This flag is no longer supported on agents",
+			EnvVars: []string{"RKE2_SYSTEM_DEFAULT_REGISTRY"},
+			Hidden:  true,
 		},
 	}
 )
 
-func NewAgentCommand() cli.Command {
+func NewAgentCommand() *cli.Command {
 	cmd := k3sAgentBase
 	cmd.Flags = append(cmd.Flags, commonFlag...)
 	cmd.Flags = append(cmd.Flags, deprecatedFlags...)
@@ -79,8 +81,8 @@ func NewAgentCommand() cli.Command {
 	return cmd
 }
 
-func agentSubcommands() cli.Commands {
-	subcommands := []cli.Command{
+func agentSubcommands() []*cli.Command {
+	subcommands := []*cli.Command{
 		// subcommands used by both windows/linux, none yet
 	}
 

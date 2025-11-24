@@ -7,10 +7,10 @@ import (
 	"github.com/k3s-io/k3s/pkg/cli/cmds"
 	"github.com/k3s-io/k3s/pkg/configfilearg"
 	"github.com/rancher/rke2/pkg/rke2"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
-func NewCertCommand() cli.Command {
+func NewCertCommand() *cli.Command {
 	k3sOpts := K3SFlagSet{}
 	subCommandOpts := map[string]K3SFlagSet{
 		"rotate": {
@@ -41,6 +41,7 @@ func NewCertCommand() cli.Command {
 			"debug":           copyFlag,
 			"log":             copyFlag,
 			"service":         copyFlag,
+			"output":          copyFlag,
 			"data-dir": {
 				Usage:   "(data) Folder to hold state",
 				Default: rke2Path,

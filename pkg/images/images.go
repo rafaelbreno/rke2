@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/name"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -84,7 +84,7 @@ func NewResolver(c ImageOverrideConfig) (*Resolver, error) {
 	}
 	for _, s := range config {
 		if err := r.ParseAndSetOverride(s.i, s.n); err != nil {
-			return nil, errors.Wrapf(err, "failed to parse %s", s.i)
+			return nil, pkgerrors.WithMessagef(err, "failed to parse %s", s.i)
 		}
 	}
 
@@ -92,7 +92,7 @@ func NewResolver(c ImageOverrideConfig) (*Resolver, error) {
 	if c.SystemDefaultRegistry != "" {
 		registry, err := name.NewRegistry(c.SystemDefaultRegistry)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to parse system-default-registry")
+			return nil, pkgerrors.WithMessage(err, "failed to parse system-default-registry")
 		}
 		r.registry = registry
 	}
@@ -104,7 +104,7 @@ func NewResolver(c ImageOverrideConfig) (*Resolver, error) {
 func (r *Resolver) ParseAndSetDefaultRegistry(s string) error {
 	registry, err := name.NewRegistry(s)
 	if err != nil {
-		return errors.Wrap(err, "failed to parse system-default-registry")
+		return pkgerrors.WithMessage(err, "failed to parse system-default-registry")
 	}
 	r.registry = registry
 	return nil
@@ -203,7 +203,7 @@ func setRegistry(ref name.Reference, registry name.Registry) (name.Reference, er
 		d.Registry = registry
 		return d, nil
 	}
-	return ref, errors.Errorf("unhandled Reference type: %T", ref)
+	return ref, fmt.Errorf("unhandled Reference type: %T", ref)
 }
 
 // getDefaultImage gets the compile-time default image for a given name.
@@ -250,8 +250,8 @@ func Pull(dir, name string, image name.Reference) error {
 }
 
 // checkPreloadedImages returns true if there are any files in dir that do not
-// end with a .txt extension. The presence of at least one such file is presumed to
-// indicate that there is an airgap image tarball available.
+// end with a .txt or .json extension. The presence of at least one such file
+// is presumed to indicate that there is an airgap image tarball available.
 func checkPreloadedImages(dir string) (bool, error) {
 	if _, err := os.Stat(dir); err != nil {
 		if os.IsNotExist(err) {
@@ -270,8 +270,8 @@ func checkPreloadedImages(dir string) (bool, error) {
 		if fileInfo.IsDir() {
 			continue
 		}
-		// return true if there is a file that doesn't end with .txt
-		if !strings.HasSuffix(fileInfo.Name(), ".txt") {
+		// return true if there is a file that doesn't end with .txt or .json
+		if name := fileInfo.Name(); !strings.HasSuffix(name, ".txt") && !strings.HasSuffix(name, ".json") {
 			return true, nil
 		}
 	}

@@ -1,7 +1,6 @@
 package util
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,14 +12,14 @@ import (
 	"time"
 
 	"github.com/k3s-io/k3s/pkg/flock"
+	"github.com/rancher/rke2/tests"
 	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 const lockFile = "/tmp/rke2-test.lock"
+const kubeconfigFile = "/etc/rancher/rke2/rke2.yaml"
 
 func findFile(file string) (string, error) {
 	i := 0
@@ -162,7 +161,10 @@ func SaveLog(log *os.File, dump bool) error {
 // for use with the next test.
 func Cleanup(rke2TestLock int) error {
 	// Save the agent/images directory
-	cmd := exec.Command("cp", "-r", "/var/lib/rancher/rke2/agent/images", "/tmp/images-backup")
+	if err := os.MkdirAll("/tmp/images-backup", 0755); err != nil && !errors.Is(err, os.ErrExist) {
+		return fmt.Errorf("failed to make backup images directory: %w", err)
+	}
+	cmd := exec.Command("sh", "-c", "mv /var/lib/rancher/rke2/agent/images/* /tmp/images-backup/")
 	if res, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("error backing up images directory: %s: %w", res, err)
 	}
@@ -179,7 +181,7 @@ func Cleanup(rke2TestLock int) error {
 	if err := os.MkdirAll("/var/lib/rancher/rke2/agent", 0755); err != nil {
 		return fmt.Errorf("failed to make agent directory: %w", err)
 	}
-	cmd = exec.Command("mv", "/tmp/images-backup", "/var/lib/rancher/rke2/agent/images")
+	cmd = exec.Command("sh", "-c", "mv /tmp/images-backup/* /var/lib/rancher/rke2/agent/images/")
 	if res, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("error restoring images directory: %s: %w", res, err)
 	}
@@ -209,7 +211,7 @@ func ServerReady() error {
 		"rke2-snapshot-controller",
 	}
 
-	pods, err := ParsePods("kube-system", metav1.ListOptions{})
+	pods, err := tests.ParsePods(kubeconfigFile)
 	if err != nil {
 		return err
 	}
@@ -225,50 +227,7 @@ func ServerReady() error {
 		}
 	}
 
-	return CheckDeployments(deploymentsToCheck)
-}
-
-func ParsePods(namespace string, opts metav1.ListOptions) ([]corev1.Pod, error) {
-	clientSet, err := k8sClient()
-	if err != nil {
-		return nil, err
-	}
-	pods, err := clientSet.CoreV1().Pods(namespace).List(context.Background(), opts)
-	if err != nil {
-		return nil, err
-	}
-
-	return pods.Items, nil
-}
-
-// CheckDeployments checks if the provided list of deployments are ready, otherwise returns an error
-func CheckDeployments(deployments []string) error {
-
-	deploymentSet := make(map[string]bool)
-	for _, d := range deployments {
-		deploymentSet[d] = false
-	}
-
-	client, err := k8sClient()
-	if err != nil {
-		return err
-	}
-	deploymentList, err := client.AppsV1().Deployments("kube-system").List(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-	for _, deployment := range deploymentList.Items {
-		if _, ok := deploymentSet[deployment.Name]; ok && deployment.Status.ReadyReplicas == deployment.Status.Replicas {
-			deploymentSet[deployment.Name] = true
-		}
-	}
-	for d, found := range deploymentSet {
-		if !found {
-			return fmt.Errorf("deployment %s is not ready", d)
-		}
-	}
-
-	return nil
+	return tests.CheckDeployments(deploymentsToCheck, kubeconfigFile)
 }
 
 func contains(source []string, target string) bool {

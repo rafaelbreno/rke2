@@ -8,52 +8,55 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rancher/rke2/pkg/podexecutor"
-	"github.com/rancher/rke2/pkg/staticpod"
-	"github.com/urfave/cli"
+	rke2cli "github.com/rancher/rke2/pkg/cli"
+	"github.com/rancher/rke2/pkg/executor/staticpod"
+	"github.com/rancher/rke2/pkg/podtemplate"
+	"github.com/urfave/cli/v2"
 )
 
 func Test_UnitInitExecutor(t *testing.T) {
 	type args struct {
 		clx      *cli.Context
-		cfg      Config
+		cfg      rke2cli.Config
 		isServer bool
 	}
 	tests := []struct {
 		name    string
 		args    args
-		want    *podexecutor.StaticPodConfig
+		want    *staticpod.StaticPodConfig
 		wantErr bool
 	}{
 		{
 			name: "agent",
 			args: args{
-				cfg: Config{
-					ControlPlaneProbeConf:        []string{"kube-proxy-startup-initial-delay-seconds=42"},
-					ControlPlaneResourceLimits:   []string{"kube-proxy-cpu=123m"},
-					ControlPlaneResourceRequests: []string{"kube-proxy-memory=123Mi"},
-					ExtraEnv:                     ExtraEnv{KubeProxy: []string{"FOO=BAR"}},
-					ExtraMounts:                  ExtraMounts{KubeProxy: []string{"/foo=/bar"}},
+				cfg: rke2cli.Config{
+					ControlPlaneProbeConf:        *cli.NewStringSlice("kube-proxy-startup-initial-delay-seconds=42"),
+					ControlPlaneResourceLimits:   *cli.NewStringSlice("kube-proxy-cpu=123m"),
+					ControlPlaneResourceRequests: *cli.NewStringSlice("kube-proxy-memory=123Mi"),
+					ExtraEnv:                     rke2cli.ExtraEnv{KubeProxy: *cli.NewStringSlice("FOO=BAR")},
+					ExtraMounts:                  rke2cli.ExtraMounts{KubeProxy: *cli.NewStringSlice("/foo=/bar")},
 				},
 				isServer: false,
 			},
-			want: &podexecutor.StaticPodConfig{
-				ControlPlaneProbeConfs: podexecutor.ControlPlaneProbeConfs{
-					KubeProxy: staticpod.ProbeConfs{
-						Startup: staticpod.ProbeConf{
-							InitialDelaySeconds: 42,
+			want: &staticpod.StaticPodConfig{
+				Config: podtemplate.Config{
+					Probes: &podtemplate.ControlPlaneProbeConfs{
+						KubeProxy: podtemplate.ProbeConfs{
+							Startup: podtemplate.ProbeConf{
+								InitialDelaySeconds: 42,
+							},
 						},
 					},
-				},
-				ControlPlaneResources: podexecutor.ControlPlaneResources{
-					KubeProxyCPULimit:      "123m",
-					KubeProxyMemoryRequest: "123Mi",
-				},
-				ControlPlaneEnv: podexecutor.ControlPlaneEnv{
-					KubeProxy: []string{"FOO=BAR"},
-				},
-				ControlPlaneMounts: podexecutor.ControlPlaneMounts{
-					KubeProxy: []string{"/foo=/bar"},
+					Resources: &podtemplate.ControlPlaneResources{
+						KubeProxyCPULimit:      "123m",
+						KubeProxyMemoryRequest: "123Mi",
+					},
+					Env: &podtemplate.ControlPlaneEnv{
+						KubeProxy: []string{"FOO=BAR"},
+					},
+					Mounts: &podtemplate.ControlPlaneMounts{
+						KubeProxy: []string{"/foo=/bar"},
+					},
 				},
 			},
 			wantErr: false,
@@ -61,32 +64,34 @@ func Test_UnitInitExecutor(t *testing.T) {
 		{
 			name: "server",
 			args: args{
-				cfg: Config{
-					ControlPlaneProbeConf:        []string{"kube-proxy-startup-initial-delay-seconds=123"},
-					ControlPlaneResourceLimits:   []string{"kube-proxy-cpu=42m"},
-					ControlPlaneResourceRequests: []string{"kube-proxy-memory=42Mi"},
-					ExtraEnv:                     ExtraEnv{KubeProxy: []string{"BAZ=BOP"}},
-					ExtraMounts:                  ExtraMounts{KubeProxy: []string{"/baz=/bop"}},
+				cfg: rke2cli.Config{
+					ControlPlaneProbeConf:        *cli.NewStringSlice("kube-proxy-startup-initial-delay-seconds=123"),
+					ControlPlaneResourceLimits:   *cli.NewStringSlice("kube-proxy-cpu=42m"),
+					ControlPlaneResourceRequests: *cli.NewStringSlice("kube-proxy-memory=42Mi"),
+					ExtraEnv:                     rke2cli.ExtraEnv{KubeProxy: *cli.NewStringSlice("BAZ=BOP")},
+					ExtraMounts:                  rke2cli.ExtraMounts{KubeProxy: *cli.NewStringSlice("/baz=/bop")},
 				},
 				isServer: true,
 			},
-			want: &podexecutor.StaticPodConfig{
-				ControlPlaneProbeConfs: podexecutor.ControlPlaneProbeConfs{
-					KubeProxy: staticpod.ProbeConfs{
-						Startup: staticpod.ProbeConf{
-							InitialDelaySeconds: 123,
+			want: &staticpod.StaticPodConfig{
+				Config: podtemplate.Config{
+					Probes: &podtemplate.ControlPlaneProbeConfs{
+						KubeProxy: podtemplate.ProbeConfs{
+							Startup: podtemplate.ProbeConf{
+								InitialDelaySeconds: 123,
+							},
 						},
 					},
-				},
-				ControlPlaneResources: podexecutor.ControlPlaneResources{
-					KubeProxyCPULimit:      "42m",
-					KubeProxyMemoryRequest: "42Mi",
-				},
-				ControlPlaneEnv: podexecutor.ControlPlaneEnv{
-					KubeProxy: []string{"BAZ=BOP"},
-				},
-				ControlPlaneMounts: podexecutor.ControlPlaneMounts{
-					KubeProxy: []string{"/baz=/bop"},
+					Resources: &podtemplate.ControlPlaneResources{
+						KubeProxyCPULimit:      "42m",
+						KubeProxyMemoryRequest: "42Mi",
+					},
+					Env: &podtemplate.ControlPlaneEnv{
+						KubeProxy: []string{"BAZ=BOP"},
+					},
+					Mounts: &podtemplate.ControlPlaneMounts{
+						KubeProxy: []string{"/baz=/bop"},
+					},
 				},
 			},
 			wantErr: false,
@@ -94,8 +99,8 @@ func Test_UnitInitExecutor(t *testing.T) {
 		{
 			name: "bad probe conf",
 			args: args{
-				cfg: Config{
-					ControlPlaneProbeConf: []string{"kube-proxy-startup-initial-delay-seconds=-123"},
+				cfg: rke2cli.Config{
+					ControlPlaneProbeConf: *cli.NewStringSlice("kube-proxy-startup-initial-delay-seconds=-123"),
 				},
 			},
 			wantErr: true,
@@ -103,8 +108,8 @@ func Test_UnitInitExecutor(t *testing.T) {
 		{
 			name: "bad control plane limits",
 			args: args{
-				cfg: Config{
-					ControlPlaneResourceLimits: []string{"kube-proxy-cpu"},
+				cfg: rke2cli.Config{
+					ControlPlaneResourceLimits: *cli.NewStringSlice("kube-proxy-cpu"),
 				},
 			},
 			wantErr: true,
@@ -112,8 +117,8 @@ func Test_UnitInitExecutor(t *testing.T) {
 		{
 			name: "bad control plane requests",
 			args: args{
-				cfg: Config{
-					ControlPlaneResourceRequests: []string{"kube-proxy-memory"},
+				cfg: rke2cli.Config{
+					ControlPlaneResourceRequests: *cli.NewStringSlice("kube-proxy-memory"),
 				},
 			},
 			wantErr: true,
@@ -125,7 +130,7 @@ func Test_UnitInitExecutor(t *testing.T) {
 			flagSet := flag.NewFlagSet("test", 0)
 			flagSet.String("pod-security-admission-config-file", "/tmp/pss.yaml", "")
 			tt.args.clx = cli.NewContext(nil, flagSet, nil)
-			got, err := initExecutor(tt.args.clx, tt.args.cfg, tt.args.isServer)
+			execer, err := initExecutor(tt.args.clx, tt.args.cfg, tt.args.isServer)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("initExecutor() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -134,30 +139,36 @@ func Test_UnitInitExecutor(t *testing.T) {
 			if tt.wantErr {
 				return
 			}
-			if !reflect.DeepEqual(got.ControlPlaneProbeConfs.KubeProxy.Startup.InitialDelaySeconds, tt.want.ControlPlaneProbeConfs.KubeProxy.Startup.InitialDelaySeconds) {
+			got, ok := execer.(*staticpod.StaticPodConfig)
+			if !ok {
+				t.Errorf("failed to convert Executor as StaticPodConfig")
+				return
+			}
+
+			if !reflect.DeepEqual(got.Config.Probes.KubeProxy.Startup.InitialDelaySeconds, tt.want.Config.Probes.KubeProxy.Startup.InitialDelaySeconds) {
 				t.Errorf("initExecutor() kube-proxy-startup-initial-delay-seconds = %+v\nWant = %+v",
-					got.ControlPlaneProbeConfs.KubeProxy.Startup.InitialDelaySeconds,
-					tt.want.ControlPlaneProbeConfs.KubeProxy.Startup.InitialDelaySeconds)
+					got.Config.Probes.KubeProxy.Startup.InitialDelaySeconds,
+					tt.want.Config.Probes.KubeProxy.Startup.InitialDelaySeconds)
 			}
-			if !reflect.DeepEqual(got.ControlPlaneResources.KubeProxyCPULimit, tt.want.ControlPlaneResources.KubeProxyCPULimit) {
+			if !reflect.DeepEqual(got.Config.Resources.KubeProxyCPULimit, tt.want.Config.Resources.KubeProxyCPULimit) {
 				t.Errorf("initExecutor() kube-proxy-cpu = %+v\nWant = %+v",
-					got.ControlPlaneResources.KubeProxyCPULimit,
-					tt.want.ControlPlaneResources.KubeProxyCPULimit)
+					got.Config.Resources.KubeProxyCPULimit,
+					tt.want.Config.Resources.KubeProxyCPULimit)
 			}
-			if !reflect.DeepEqual(got.ControlPlaneResources.KubeProxyMemoryRequest, tt.want.ControlPlaneResources.KubeProxyMemoryRequest) {
+			if !reflect.DeepEqual(got.Config.Resources.KubeProxyMemoryRequest, tt.want.Config.Resources.KubeProxyMemoryRequest) {
 				t.Errorf("initExecutor() kube-proxy-memory = %+v\nWant = %+v",
-					got.ControlPlaneResources.KubeProxyMemoryRequest,
-					tt.want.ControlPlaneResources.KubeProxyMemoryRequest)
+					got.Config.Resources.KubeProxyMemoryRequest,
+					tt.want.Config.Resources.KubeProxyMemoryRequest)
 			}
-			if !reflect.DeepEqual(got.ControlPlaneEnv.KubeProxy, tt.want.ControlPlaneEnv.KubeProxy) {
+			if !reflect.DeepEqual(got.Config.Env.KubeProxy, tt.want.Config.Env.KubeProxy) {
 				t.Errorf("initExecutor() kube-proxy extra-env = %+v\nWant = %+v",
-					got.ControlPlaneEnv.KubeProxy,
-					tt.want.ControlPlaneEnv.KubeProxy)
+					got.Config.Env.KubeProxy,
+					tt.want.Config.Env.KubeProxy)
 			}
-			if !reflect.DeepEqual(got.ControlPlaneMounts.KubeProxy, tt.want.ControlPlaneMounts.KubeProxy) {
+			if !reflect.DeepEqual(got.Config.Mounts.KubeProxy, tt.want.Config.Mounts.KubeProxy) {
 				t.Errorf("initExecutor() kube-proxy extra-mounts = %+v\nWant = %+v",
-					got.ControlPlaneMounts.KubeProxy,
-					tt.want.ControlPlaneMounts.KubeProxy)
+					got.Config.Mounts.KubeProxy,
+					tt.want.Config.Mounts.KubeProxy)
 			}
 		})
 	}

@@ -1,17 +1,19 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"os"
 
 	"github.com/k3s-io/k3s/pkg/configfilearg"
 	"github.com/rancher/rke2/pkg/cli/cmds"
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 func main() {
 	app := cmds.NewApp()
-	app.Commands = []cli.Command{
+	app.Commands = []*cli.Command{
 		cmds.NewServerCommand(),
 		cmds.NewAgentCommand(),
 		cmds.NewEtcdSnapshotCommand(),
@@ -21,7 +23,7 @@ func main() {
 		cmds.NewCompletionCommand(),
 	}
 
-	if err := app.Run(configfilearg.MustParse(os.Args)); err != nil {
-		logrus.Fatal(err)
+	if err := app.Run(configfilearg.MustParse(os.Args)); err != nil && !errors.Is(err, context.Canceled) {
+		logrus.Fatalf("Error: %v", err)
 	}
 }

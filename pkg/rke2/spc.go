@@ -10,15 +10,16 @@ import (
 	"github.com/k3s-io/k3s/pkg/cli/cmds"
 	"github.com/k3s-io/k3s/pkg/util"
 	"github.com/k3s-io/k3s/pkg/version"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
+	"github.com/rancher/rke2/pkg/executor/staticpod"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
+	toolscache "k8s.io/client-go/tools/cache"
 	toolswatch "k8s.io/client-go/tools/watch"
 )
 
@@ -50,17 +51,7 @@ func cleanupStaticPodsOnSelfDelete(dataDir string) cmds.StartupHook {
 func watchForSelfDelete(ctx context.Context, dataDir string, client kubernetes.Interface) {
 	nodeName := os.Getenv("NODE_NAME")
 	logrus.Infof("Watching for delete of %s Node object", nodeName)
-	fieldSelector := fields.Set{metav1.ObjectNameField: nodeName}.String()
-	lw := &cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (object runtime.Object, e error) {
-			options.FieldSelector = fieldSelector
-			return client.CoreV1().Nodes().List(ctx, options)
-		},
-		WatchFunc: func(options metav1.ListOptions) (i watch.Interface, e error) {
-			options.FieldSelector = fieldSelector
-			return client.CoreV1().Nodes().Watch(ctx, options)
-		},
-	}
+	lw := toolscache.NewListWatchFromClient(client.CoreV1().RESTClient(), "nodes", metav1.NamespaceNone, fields.OneTermEqualSelector(metav1.ObjectNameField, nodeName))
 	condition := func(event watch.Event) (bool, error) {
 		if n, ok := event.Object.(*v1.Node); ok {
 			if n.ObjectMeta.DeletionTimestamp != nil || n.Annotations[removalAnnotation] == "true" {
@@ -71,9 +62,10 @@ func watchForSelfDelete(ctx context.Context, dataDir string, client kubernetes.I
 		return false, fmt.Errorf("event object not of type Node")
 	}
 
-	_, err := toolswatch.UntilWithSync(ctx, lw, &v1.Node{}, nil, condition)
-	if err != nil && !errors.Is(err, context.Canceled) {
-		logrus.Errorf("spc: failed to wait for node deletion: %v", err)
+	if _, err := toolswatch.UntilWithSync(ctx, lw, &v1.Node{}, nil, condition); err != nil {
+		if !wait.Interrupted(err) {
+			logrus.Errorf("spc: failed to wait for node deletion: %v", err)
+		}
 		return
 	}
 
@@ -86,11 +78,11 @@ func watchForSelfDelete(ctx context.Context, dataDir string, client kubernetes.I
 // cleanupStaticPods deletes all the control-plane and etc static pod manifests.
 func cleanupStaticPods(dataDir string) error {
 	components := []string{"kube-apiserver", "kube-scheduler", "kube-controller-manager", "cloud-controller-manager", "etcd"}
-	manifestDir := podManifestsDir(dataDir)
+	manifestDir := staticpod.PodManifestsDir(dataDir)
 	for _, component := range components {
 		manifestName := filepath.Join(manifestDir, component+".yaml")
 		if err := os.RemoveAll(manifestName); err != nil {
-			return errors.Wrapf(err, "unable to delete %s manifest", component)
+			return pkgerrors.WithMessagef(err, "unable to delete %s manifest", component)
 		}
 	}
 	return nil

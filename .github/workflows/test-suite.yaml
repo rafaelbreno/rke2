@@ -5,6 +5,7 @@ on:
       - "**.md"
       - "channel.yaml"
       - "install.sh"
+      - "updatecli/**"
       - ".github/**"
       - "!.github/workflows/test-suite.yaml"
   pull_request:
@@ -12,6 +13,7 @@ on:
       - "**.md"
       - "channel.yaml"
       - "install.sh"
+      - "updatecli/**"
       - ".github/**"
       - "!.github/workflows/test-suite.yaml"
   workflow_dispatch: {}
@@ -22,10 +24,10 @@ permissions:
 jobs:
   build:
     name: Build RKE2 Images and Binary
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.repository == 'rancher/rke2' && 'runs-on,runner=16cpu-linux-x64' || 'ubuntu-24.04' }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 1
     - name: Find Go Version for Build
@@ -54,7 +56,7 @@ jobs:
         cp ./dist/artifacts/rke2.*-amd64.tar.gz ./build/images/
         rm ./build/images/rke2-runtime.tar
     - name: Upload RKE2 Binary and Runtime Image
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: rke2-test-artifacts
         path: ./build/images/*
@@ -66,13 +68,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        itest: [etcdsnapshot]
+        itest: [startup, etcdsnapshot]
       max-parallel: 3
     env:
       GOCOVERDIR: /tmp/rke2cov
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 1
     - name: Install Go
@@ -81,7 +83,7 @@ jobs:
       run: |
         mkdir -p ./bin ./build/images
     - name: Download RKE2 Binary and Runtime Image
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v6
       with:
         name: rke2-test-artifacts
         path: ./build/images
@@ -92,11 +94,11 @@ jobs:
     - name: Run Integration Tests
       run: | 
         mkdir -p $GOCOVERDIR
-        sudo -E env "PATH=$PATH" go test -v -timeout=45m ./tests/integration/${{ matrix.itest }}/... -run Integration
+        sudo -E env "PATH=$PATH" go test -timeout=45m ./tests/integration/${{ matrix.itest }}/... -run Integration -ginkgo.v -test.v
     - name: Generate coverage report
       run:  go tool covdata textfmt -i $GOCOVERDIR -o ${{ matrix.itest }}.out
     - name: Upload Results To Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ./${{ matrix.itest }}.out
@@ -105,30 +107,108 @@ jobs:
     - name: On Failure, Dump Server Logs
       if: ${{ failure() }}
       run: cat ./tests/integration/${{ matrix.itest }}/r2log.txt
-
+  docker: 
+    name: "Docker Tests"
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        dtest: [basics, flannel, profile, traefik]
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v6
+        with: {fetch-depth: 1}
+      - name: Install Go
+        uses: ./.github/actions/setup-go
+      - name: Download RKE2 Binary and Runtime Image
+        uses: actions/download-artifact@v6
+        with:
+          name: rke2-test-artifacts
+          path: ./artifacts
+      - name: Place the artifacts back and compute sha256sum
+        run: |
+          mkdir -p ./dist/artifacts
+          mkdir -p ./build/images
+          mkdir -p ./bin
+          mv ./artifacts/rke2-* ./build/images/
+          mv ./artifacts/rke2.*-amd64.tar.gz ./dist/artifacts
+          sha256sum ./dist/artifacts/rke2.linux-amd64.tar.gz > ./dist/artifacts/sha256sum-amd64.txt
+      - name: Load kernel modules
+        run: |
+          sudo modprobe br_netfilter overlay
+      - name: Run ${{ matrix.dtest }} Test
+        run: |
+          go test -v -timeout=20m ./tests/docker/${{ matrix.dtest }}/${{ matrix.dtest }}_test.go -ginkgo.v -ci
+  docker-large:
+    name: "Docker Tests (Large)"
+    needs: build
+    if: github.repository == 'rancher/rke2'
+    runs-on: runs-on,runner=8cpu-linux-x64,ram=16+24,run-id=${{ github.run_id }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        dtest: [dualstack, secretsencryption, splitserver]
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v6
+        with: {fetch-depth: 1}
+      - name: Check Memory
+        run: lsmem
+      - name: Install Go
+        uses: ./.github/actions/setup-go
+      - name: Download RKE2 Binary and Runtime Image
+        uses: actions/download-artifact@v6
+        with:
+          name: rke2-test-artifacts
+          path: ./artifacts
+      - name: Place the artifacts back and compute sha256sum
+        run: |
+          mkdir -p ./dist/artifacts
+          mkdir -p ./build/images
+          mkdir -p ./bin
+          mv ./artifacts/rke2-* ./build/images/
+          mv ./artifacts/rke2.*-amd64.tar.gz ./dist/artifacts
+          sha256sum ./dist/artifacts/rke2.linux-amd64.tar.gz > ./dist/artifacts/sha256sum-amd64.txt
+      - name: Load kernel modules
+        run: |
+          sudo modprobe br_netfilter overlay
+      - name: Run ${{ matrix.dtest }} Test
+        run: |
+          go test -v -timeout=30m ./tests/docker/${{ matrix.dtest }}/${{ matrix.dtest }}_test.go -ginkgo.v -ci
   e2e:
     name: "E2E Tests"
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        etest: [dnscache, kine]
+        etest: [kine, ciliumnokp, multus]
       max-parallel: 3
     steps:
     - name: "Checkout"
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with: {fetch-depth: 1}
     
     - name: Set up vagrant and libvirt
       uses: ./.github/actions/vagrant-setup
-    - name: "Vagrant Cache"
+    - name: Vagrant R/W Cache
+      if: github.ref == 'refs/heads/master'
       uses: actions/cache@v4
       with:
         path: |
             ~/.vagrant.d/boxes
-        key: vagrant-box-ubuntu-2004
+        key: vagrant-box-ubuntu-2404
+    - name: Vagrant Read Cache
+      if: github.ref != 'refs/heads/master'
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+            ~/.vagrant.d/boxes
+        key: vagrant-box-ubuntu-2404
     - name: "Vagrant Plugin(s)"
       run: vagrant plugin install vagrant-rke2 vagrant-reload vagrant-scp
     
@@ -139,7 +219,7 @@ jobs:
           curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
           sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
     - name: Download RKE2 Binary and Runtime Image
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v6
       with:
         name: rke2-test-artifacts
         path: ./artifacts
@@ -154,4 +234,4 @@ jobs:
     - name: Run ${{ matrix.etest }} Test
       run: | 
         cd tests/e2e/${{ matrix.etest }}
-        go test -v -timeout=45m ./${{ matrix.etest}}_test.go -ci -local
+        go test -timeout=45m ./${{ matrix.etest}}_test.go -ci -local -ginkgo.v -test.v
