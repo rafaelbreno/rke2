@@ -38,7 +38,7 @@ jobs:
 
       - name: 'Generate config file'
         shell: bash
-        run: ./release-tool config gen > ecm-config.json
+        run: ./release-tool config gen > /home/runner/.ecm-distro-tools/config.json
 
       - name: Run release verify
         run: ./release-tool verify ga
