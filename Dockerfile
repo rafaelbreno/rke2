@@ -1,21 +1,21 @@
 ARG KUBERNETES_VERSION=dev
 
-# Build environment
-FROM rancher/hardened-build-base:v1.24.9b1 AS build
-ARG DAPPER_HOST_ARCH
-ENV ARCH $DAPPER_HOST_ARCH
+# Base image for common build tools
+FROM rancher/hardened-build-base:v1.25.5b2 AS base
+ARG BUILDARCH
+ENV ARCH $BUILDARCH
 RUN set -x && \
     apk --no-cache add \
     bash \
     curl \
     file \
     git \
+    findutils \
     libseccomp-dev \
     rsync \
     gcc \
     bsd-compat-headers \
-    py-pip \
-    py3-pip \
+    aws-cli \
     pigz \
     tar \
     yq \
@@ -28,15 +28,10 @@ RUN if [ "${ARCH}" = "amd64" ]; then \
 FROM registry.suse.com/bci/bci-base AS rpm-macros
 RUN zypper install -y systemd-rpm-macros
 
-# Dapper/Drone/CI environment
-FROM build AS dapper
-ENV DAPPER_ENV GODEBUG CI GOCOVER REPO TAG GITHUB_ACTION_TAG PAT_USERNAME PAT_TOKEN KUBERNETES_VERSION DOCKER_BUILDKIT DRONE_BUILD_EVENT IMAGE_NAME AWS_SECRET_ACCESS_KEY AWS_ACCESS_KEY_ID ENABLE_REGISTRY DOCKER_USERNAME DOCKER_PASSWORD GH_TOKEN REGISTRY
-ARG DAPPER_HOST_ARCH
-ENV ARCH $DAPPER_HOST_ARCH
-ENV DAPPER_OUTPUT ./dist ./bin ./build
-ENV DAPPER_DOCKER_SOCKET true
-ENV DAPPER_TARGET dapper
-ENV DAPPER_RUN_ARGS "--privileged --network host -v /tmp:/tmp -v rke2-pkg:/go/pkg -v rke2-cache:/root/.cache/go-build -v trivy-cache:/root/.cache/trivy"
+# Build environment
+FROM base AS build-env
+ARG BUILDARCH
+ENV ARCH $BUILDARCH
 RUN if [ "${ARCH}" = "amd64" ] || [ "${ARCH}" = "arm64" ]; then \
         VERSION=0.56.10 OS=linux && \
         curl -sL "https://github.com/vmware-tanzu/sonobuoy/releases/download/v${VERSION}/sonobuoy_${VERSION}_${OS}_${ARCH}.tar.gz" | \
@@ -46,12 +41,11 @@ RUN if [ "${ARCH}" = "amd64" ] || [ "${ARCH}" = "arm64" ]; then \
 RUN curl -sL "https://github.com/cli/cli/releases/download/v2.53.0/gh_2.53.0_linux_${ARCH}.tar.gz" | \ 
     tar --strip-components=2 -xzvf - -C /usr/local/bin gh_2.53.0_linux_${ARCH}/bin/gh;
 
-RUN curl -sL https://dl.k8s.io/release/$( \
-    curl -sL https://dl.k8s.io/release/stable.txt \
+RUN curl --retry 3 -sL https://dl.k8s.io/release/$( \
+    curl --retry 3 -sL https://dl.k8s.io/release/stable.txt \
     )/bin/linux/${ARCH}/kubectl -o /usr/local/bin/kubectl && \
     chmod a+x /usr/local/bin/kubectl
 
-RUN python3 -m pip install awscli
 RUN curl -sL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.55.2
 RUN set -x && \
     apk --no-cache add \
@@ -63,7 +57,7 @@ RUN set -x && \
     	apk add --no-cache rpm-dev; \
     fi
 
-RUN GOCR_VERSION="v0.20.2" && \
+RUN GOCR_VERSION="v0.20.7" && \
     if [ "${ARCH}" = "arm64" ]; then \
         wget https://github.com/google/go-containerregistry/releases/download/${GOCR_VERSION}/go-containerregistry_Linux_arm64.tar.gz && \
         tar -zxvf go-containerregistry_Linux_arm64.tar.gz && \
@@ -77,12 +71,12 @@ RUN GOCR_VERSION="v0.20.2" && \
     fi
 
 WORKDIR /source
+RUN git config --global --add safe.directory /source
 
 COPY --from=rpm-macros /usr/lib/rpm/macros.d/macros.systemd /usr/lib/rpm/macros.d
-# End Dapper stuff
 
 # Shell used for debugging
-FROM dapper AS shell
+FROM build-env AS shell
 RUN set -x && \
     apk --no-cache add \
     bash-completion \
@@ -103,7 +97,7 @@ VOLUME /var/lib/rancher/rke2
 # This makes it so we can run and debug k3s too
 VOLUME /var/lib/rancher/k3s
 
-FROM build AS charts
+FROM base AS charts
 ARG CHART_REPO="https://rke2-charts.rancher.io"
 ARG KUBERNETES_VERSION=""
 ARG CACHEBUST="cachebust"
@@ -116,10 +110,10 @@ RUN rm -vf /charts/*.sh /charts/*.md /charts/chart_versions.yaml
 # This image includes any host level programs that we might need. All binaries
 # must be placed in bin/ of the file image and subdirectories of bin/ will be flattened during installation.
 # This means bin/foo/bar will become bin/bar when rke2 installs this to the host
-FROM rancher/hardened-kubernetes:v1.34.2-rke2r1-build20251112 AS kubernetes
-FROM rancher/hardened-containerd:v2.1.5-k3s1-build20251106 AS containerd
-FROM rancher/hardened-crictl:v1.34.0-build20251017 AS crictl
-FROM rancher/hardened-runc:v1.3.3-build20251105 AS runc
+FROM rancher/hardened-containerd:v2.1.5-k3s1-build20260109 AS containerd
+FROM rancher/hardened-crictl:v1.35.0-build20251219 AS crictl
+FROM rancher/hardened-runc:v1.4.0-build20251210 AS runc
+FROM rancher/hardened-kubernetes:v1.35.0-rke2r3-build20260127 AS kubernetes
 
 FROM scratch AS runtime-collect
 COPY --from=runc \
