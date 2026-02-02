@@ -34,10 +34,10 @@ jobs:
           check-latest: true
 
       - name: Build Go binary
-        run: go build -o release ./cmd/release/main.go
+        run: go build -o release-tool ./cmd/release/main.go
 
       - name: Run release verify
-        run: ./release verify ga
+        run: ./release-tool verify ga
   release-amd64:
     runs-on: ubuntu-latest
     needs: [check-for-rc]
