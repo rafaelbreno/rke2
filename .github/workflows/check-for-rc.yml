@@ -27,3 +27,4 @@ jobs:
 
       - name: Run release verify
         run: ./release verify ga
+
