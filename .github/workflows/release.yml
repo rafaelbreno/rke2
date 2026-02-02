@@ -36,6 +36,10 @@ jobs:
       - name: Build Go binary
         run: go build -o release-tool ./cmd/release/main.go
 
+      - name: 'Generate config file'
+        shell: bash
+        run: ./release-tool config gen > ecm-config.json
+
       - name: Run release verify
         run: ./release-tool verify ga
   release-amd64:
