@@ -43,7 +43,12 @@ jobs:
       - name: Run release verify
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: ./release-tool verify ga ${{ github.ref_name }} --config-file "ecm-config.json"
+        run: | 
+          ./release-tool verify ga "${{ github.ref_name }}" \ 
+          --owner "${{ github.repository_owner }}"
+          --repo "${{ github.event.repository.name }}"
+          --config-file "ecm-config.json"
+
   release-amd64:
     runs-on: ubuntu-latest
     needs: [check-for-rc]
