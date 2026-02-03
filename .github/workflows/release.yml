@@ -45,8 +45,8 @@ jobs:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: | 
           ./release-tool verify ga "${{ github.ref_name }}" \ 
-          --owner "${{ github.repository_owner }}"
-          --repo "${{ github.event.repository.name }}"
+          --owner "${{ github.repository_owner }}" \
+          --repo "${{ github.event.repository.name }}" \
           --config-file "ecm-config.json"
 
   release-amd64:
