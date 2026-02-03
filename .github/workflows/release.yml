@@ -41,7 +41,7 @@ jobs:
         run: ./release-tool config gen > ecm-config.json
 
       - name: Run release verify
-        run: ./release-tool verify ga --config-file "ecm-config.json"
+        run: ./release-tool verify ga ${{ github.ref_name }}--config-file "ecm-config.json"
   release-amd64:
     runs-on: ubuntu-latest
     needs: [check-for-rc]
