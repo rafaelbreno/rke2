@@ -38,7 +38,9 @@ jobs:
 
       - name: 'Generate config file'
         shell: bash
-        run: ./release-tool config gen > ecm-config.json
+        run: |
+          mkdir -p /home/runner/.ecm-distro-tools
+          ./release-tool config gen > /home/runner/.ecm-distro-tools/config.json
 
       - name: Run release verify
         env:
@@ -46,8 +48,7 @@ jobs:
         run: | 
           ./release-tool verify ga "${{ github.ref_name }}" \ 
               --owner "${{ github.repository_owner }}" \
-              --repo "${{ github.event.repository.name }}" \
-              --config-file "ecm-config.json"
+              --repo "${{ github.event.repository.name }}"
 
   release-amd64:
     runs-on: ubuntu-latest
