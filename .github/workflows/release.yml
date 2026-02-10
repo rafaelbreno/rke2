@@ -10,7 +10,6 @@ on:
 
 env:
   GITHUB_ACTION_TAG: ${{ github.ref_name }}
-  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   
 name: Release
 permissions:
@@ -44,7 +43,7 @@ jobs:
 
       - name: Run release verify
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         shell: bash
         run: |
           ./release-tool verify ga "${{ github.ref_name }}" \
