@@ -44,7 +44,7 @@ jobs:
 
       - name: Run release verify
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           ./release-tool verify ga "${{ github.ref_name }}" \
