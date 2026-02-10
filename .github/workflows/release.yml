@@ -40,13 +40,17 @@ jobs:
         shell: bash
         run: |
           mkdir -p /home/runner/.ecm-distro-tools
-          ./release-tool config gen > /home/runner/.ecm-distro-tools/config.json
+          ./release-tool config gen > ecm-config.json
 
       - name: Run release verify
         env:
-          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: | 
-          ./release-tool verify ga "${{ github.ref_name }}" --owner "${{ github.repository_owner }}" --repo "${{ github.event.repository.name }}"
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          ./release-tool verify ga "${{ github.ref_name }}" \
+            --owner "${{ github.repository_owner }}" \
+            --repo "${{ github.event.repository.name }}" \
+            --config-file "ecm-config.json"
 
   release-amd64:
     runs-on: ubuntu-latest
