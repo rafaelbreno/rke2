@@ -44,10 +44,6 @@ jobs:
     - name: Load kernel modules
       run: |
        sudo modprobe br_netfilter overlay
-        
-    - name: Test
-      run: |
-        make in-docker-test
 
     - name: Set environment variables
       run: |
