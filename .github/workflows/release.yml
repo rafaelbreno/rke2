@@ -67,7 +67,7 @@ jobs:
 
     - name: Package Images
       run: |
-        make in-docker-package-images
+        REPO=${{ secrets.DOCKER_USERNAME }} make in-docker-package-images
     
     - name: Scan Images
       continue-on-error: true
@@ -121,7 +121,7 @@ jobs:
   
     - name: Package windows images
       run: |
-        GITHUB_ACTION_TAG=${{ github.ref_name }} make in-docker-package-windows-images
+        REPO=${{ secrets.DOCKER_USERNAME }} GITHUB_ACTION_TAG=${{ github.ref_name }} make in-docker-package-windows-images
 
     - name: Checksum Artifacts
       run: |
@@ -187,7 +187,7 @@ jobs:
 
     - name: Package Images
       run: |
-        make in-docker-package-images
+        REPO=${{ secrets.DOCKER_USERNAME }} make in-docker-package-images
     
     - name: Scan Images
       continue-on-error: true
