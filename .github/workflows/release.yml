@@ -242,7 +242,7 @@ jobs:
         path: dist/artifacts
     - name: Publish Artifacts
       run: |
-        GITHUB_REPOSITORY=${{ github.repository }} make publish-binary
+        make publish-binary
       env:
         GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
